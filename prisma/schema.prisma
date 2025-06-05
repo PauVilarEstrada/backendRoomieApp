@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String    @id @default(cuid())
+  name                  String
+  surname               String
+  prefix                String
+  phone                 String
+  email                 String    @unique
+  birthDate             DateTime
+  gender                String    @default("No quiero decirlo")
+  language              String
+  passwordHash          String
+  emailVerified         Boolean   @default(false)
+  verificationCode      String?
+  verificationExpiresAt DateTime?
+  isAdmin               Boolean   @default(false)
+  profileType           String    @default("busco") // TEMPORAL para la migración 'busco o ofrezco'
+  createdAt             DateTime  @default(now())
+
+  ads                 Ad[]
+  roommateProfile     RoommateProfile?
+  roomProviderProfile RoomProviderProfile?
+
+  swipesSent     Swipe[] @relation("SwipeFromUser")
+  swipesReceived Swipe[] @relation("SwipeToUser")
+
+  matchesA Match[] @relation("MatchUserA")
+  matchesB Match[] @relation("MatchUserB")
+
+  messagesSent ChatMessage[]
+
+  adminLogs AdminLog[] // Relación inversa con AdminLog
+}
+
+model Ad {
+  id            String   @id @default(cuid())
+  type          String // "busco" o "ofrezco"
+  title         String
+  description   String
+  location      String
+  price         Int
+  expenses      Int
+  availableFrom DateTime
+  minStay       Int
+  maxStay       Int?
+  allowsAnimals Boolean
+  genderPref    String
+  features      String[]
+  restrictions  String[]
+  images        String[]
+  video         String?
+  gain          Float    @default(0)
+
+  views          Int      @default(0)  // 👁️ Vistas
+  clicks         Int      @default(0)  // 🖱️ Clics
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  swipes Swipe[]
+
+  latitude  Float?
+  longitude Float?
+
+  roomProviderProfile RoomProviderProfile?
+}
+
+model RoommateProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  description   String
+  preferredArea String
+  moveInDate    DateTime
+  stayDuration  String
+  genderPref    String
+  allowsPets    Boolean
+  profilePhotos String[] // min 1 - max 8
+  views          Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model RoomProviderProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  spaceDesc     String
+  rent          Int
+  expenses      Int
+  area          String
+  availability  DateTime
+  minStay       Int
+  maxStay       Int?
+  allowsPets    Boolean
+  features      String[]
+  restrictions  String[]
+  genderPref    String
+  roomPhotos    String[] // min 2 - max 15
+  profilePhotos String[] // opcional - max 5
+  roomVideo     String? // opcional
+  views          Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+
+  ad   Ad?     @relation(fields: [adId], references: [id])
+  adId String? @unique // este campo también debe existir
+}
+
+model AdBanner {
+  id        String   @id @default(cuid())
+  title     String
+  imageUrl  String // banner o imagen promocional
+  link      String? // URL externa si se quiere redirigir
+  location  String // dónde se muestra: "inicio", "tinder", "listado"
+  views     Int      @default(0)
+  clicks    Int      @default(0)
+  createdAt DateTime @default(now())
+  isActive  Boolean  @default(true)
+}
+
+model Swipe {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  adId       String
+  createdAt  DateTime @default(now())
+
+  fromUser User @relation("SwipeFromUser", fields: [fromUserId], references: [id])
+  toUser   User @relation("SwipeToUser", fields: [toUserId], references: [id])
+  ad       Ad   @relation(fields: [adId], references: [id])
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+
+  userA User @relation("MatchUserA", fields: [userAId], references: [id])
+  userB User @relation("MatchUserB", fields: [userBId], references: [id])
+
+  messages ChatMessage[]
+}
+
+model ChatMessage {
+  id       String   @id @default(cuid())
+  matchId  String
+  senderId String
+  content  String
+  sentAt   DateTime @default(now())
+  read      Boolean  @default(false)
+  imageUrl String?
+
+  match  Match @relation(fields: [matchId], references: [id])
+  sender User  @relation(fields: [senderId], references: [id])
+}
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String // "UPDATE_USER", "DELETE_USER", etc.
+  targetId  String? // ID del usuario objetivo
+  timestamp DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+}
