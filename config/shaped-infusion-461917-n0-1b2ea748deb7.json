@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "shaped-infusion-461917-n0",
+  "private_key_id": "1b2ea748deb74a8fba03ceb005ad8bd13ff4616c",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCoMDBr5GEVFzjY\npXypLf1dNBWdLHPYtpR41kSuEGKwQCBlW19av6UT33ecfnEBdhfV6t4GmYawWqEF\nkGGv0LjFnH2ZX/uSU7M6QNdH0DaB2JOiASJE4200E193mDjV1v5G7ufPdMXQQDmw\nVV6iU3l/NkpHU+Po3sLFGyCuLSuey+rxJUMScYU4RvTR9JqY03xoerWXlmWS+6t9\ne8gs+iCtYjYTTckguJT/g/s3+QIsjV553bS+s/dBCNESz5uRQuiAblZPMTBcIXX1\nLVirtx87a3VnhBIqyY5E7ZOyfLUCmDmyYTXAC5rTXMSuV2lwoH2PFM9mNWlyWiFT\nY3ymbusjAgMBAAECggEATvXQxdaCfZRZa9zFmeete4RoYVHtUWDmc5SkydOHgZeZ\nnfw32DMBHUNctGvoQfdfWV7avd52DXV/A021jwU+ugeuL8OQKDKDgmXOrDhkXrF/\nHh/KJu1e54Pw3gTpKfu1hTfEPPFlrU95xf9OXocyEzc5yCLqbPmoF0GVJjCuue3f\nlCsMtqGIzFeV/gZu31mIhqqq26F5F/tfKtNMpZa7L4+wzR059VkjSpmr0XC49r0q\n6eLWf0tIosf6COhOo2AmQHq/pX5n5etrLV5f5iwRTl//h2ApfBTmfZmzPpM+CeAc\ntu443LfGq1+UjGnCzJA1XtkfKolAZ5mUggvXtQ+cAQKBgQDSicX5k/BVMZlJZgUS\nhzVGHS55TTqB7k+Xy+jlWsgx2zKzn99Ifj4JUIJ/zuKSDtO48B819531lEY4NgPp\nRcSRd+izBuFt89iDZpfDtN760qz0fckLQ3OaqF5Ht5HU531GDA2cHiPP5q7ZIw32\n/YnkYtYdcnSxrBdGquBbAnudoQKBgQDMgWBYQdBm5DIcIdCKBIB1qP3P38GOw4Ul\nFN1fwHYWLHy4IILP0qTw0+gihgEvONTsb2dtljbSkIhQkW1hhhQos1BA5p0gfbDG\nr4UY2oWs6Kqvcg2wzYXa9mryUWUc1cMq1o9gCAHbZ+bD5/TJMdTzkqF9mn0h3kYU\n3tMO/tBqQwKBgQCIio+ZsCcyqUsXfhGWFZgoU66bPsnOEEcQVE9Dx9+D7fvw4KNH\neZA0LEGmL/9i6DjJfPlQ37lS1om/1NAujm/QQ+rniHPVAksN1RBh/UCLfOxsV9N1\n+ZXU3JLggh4S7Nqi/hgpgqaJI7uL2R8qav3t32eri1pBDDHAQ/vjKjYPYQKBgQC4\nG2EZE2cCuj1Chk6vcg4T3udg1Rfz5qFfGMGTCjlFDRfay6n4XrKO/LbnHazDTm6h\nzElYpvsD5YpSvhmyynorigKd6v9Z2M3kkO9JyLC/UVcYS513pg7zaRQuwog8xVTG\npBK/aXYCiC9//rqoxmvoPAGWihZM/0YoU9G+ljga8QKBgQC3B0gsLsqzcGd8H/jp\ned+qXGmxX+vlilddTtzVHp/ealPJvkzseLxF/cAOWhpTnX7MYQg/pYVPvnN7ZXFY\nktGrE57yaQG4IiGbCYCRyQJzA4M9ka9Qf9mu9Sp+0RhTrPHJM1AaGQHYYvjLib5O\n5NG4G9LJJxbZyfxgFzgFW13+AA==\n-----END PRIVATE KEY-----\n",
+  "client_email": "backend-storage-uploader@shaped-infusion-461917-n0.iam.gserviceaccount.com",
+  "client_id": "113413399568259459696",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/backend-storage-uploader%40shaped-infusion-461917-n0.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

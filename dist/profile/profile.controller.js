@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteMyAccount = exports.updateMyAccount = exports.getRoomProviderProfileById = exports.getRoommateProfileById = exports.deleteRoomProviderProfile = exports.updateRoomProviderProfile = exports.deleteRoommateProfile = exports.updateRoommateProfile = exports.createRoomProviderProfile = exports.createRoommateProfile = void 0;
 const client_1 = require("../prisma/client");
 const profile_validator_1 = require("./profile.validator");
+const storage_1 = require("../utils/storage");
 const createRoommateProfile = async (req, res) => {
     try {
         const parsed = profile_validator_1.roommateProfileSchema.safeParse(req.body);
@@ -67,15 +68,28 @@ const createRoomProviderProfile = async (req, res) => {
             res.status(400).json({ error: parsed.error.flatten().fieldErrors });
             return;
         }
-        const data = parsed.data;
         if (req.user?.profileType !== 'ofrezco') {
             res.status(403).json({ error: 'Este usuario no es del tipo "ofrezco"' });
             return;
         }
-        const existingProfile = await client_1.prisma.roomProviderProfile.findUnique({ where: { userId: req.user.userId } });
-        if (existingProfile) {
-            res.status(409).json({ error: 'Ya tienes un perfil de proveedor creado' });
-            return;
+        const data = parsed.data;
+        // Subir archivos (roomPhotos) a Cloud Storage
+        const photos = req.files; // multer
+        const photoUrls = [];
+        for (const file of photos) {
+            const blob = storage_1.bucket.file(`roomPhotos/${Date.now()}_${file.originalname}`);
+            const blobStream = blob.createWriteStream({
+                resumable: false,
+                contentType: file.mimetype,
+                predefinedAcl: 'publicRead' // para acceso público
+            });
+            await new Promise((resolve, reject) => {
+                blobStream.on('finish', resolve);
+                blobStream.on('error', reject);
+                blobStream.end(file.buffer);
+            });
+            const publicUrl = `https://storage.googleapis.com/${storage_1.bucket.name}/${blob.name}`;
+            photoUrls.push(publicUrl);
         }
         const profile = await client_1.prisma.roomProviderProfile.create({
             data: {
@@ -88,12 +102,12 @@ const createRoomProviderProfile = async (req, res) => {
                 minStay: data.minStay,
                 maxStay: data.maxStay,
                 allowsPets: data.allowsPets,
-                features: data.features,
-                restrictions: data.restrictions,
+                features: data.features || [],
+                restrictions: data.restrictions || [],
                 genderPref: data.genderPref,
-                roomPhotos: data.roomPhotos,
-                profilePhotos: data.profilePhotos,
-                roomVideo: data.roomVideo
+                roomPhotos: photoUrls,
+                profilePhotos: data.profilePhotos
+                // Eliminado roomVideo
             }
         });
         await client_1.prisma.ad.create({
@@ -111,8 +125,8 @@ const createRoomProviderProfile = async (req, res) => {
                 genderPref: data.genderPref,
                 features: data.features || [],
                 restrictions: data.restrictions || [],
-                images: data.roomPhotos,
-                video: data.roomVideo || null,
+                images: photoUrls,
+                video: null,
                 userId: req.user.userId
             }
         });
@@ -166,9 +180,34 @@ const updateRoomProviderProfile = async (req, res) => {
             res.status(403).json({ error: 'No autorizado para modificar este perfil' });
             return;
         }
+        // Si recibes nuevas fotos en update, sube igual
+        const photos = req.files;
+        let photoUrls = undefined;
+        if (photos && photos.length > 0) {
+            photoUrls = [];
+            for (const file of photos) {
+                const blob = storage_1.bucket.file(`roomPhotos/${Date.now()}_${file.originalname}`);
+                const blobStream = blob.createWriteStream({
+                    resumable: false,
+                    contentType: file.mimetype,
+                    predefinedAcl: 'publicRead'
+                });
+                await new Promise((resolve, reject) => {
+                    blobStream.on('finish', resolve);
+                    blobStream.on('error', reject);
+                    blobStream.end(file.buffer);
+                });
+                const publicUrl = `https://storage.googleapis.com/${storage_1.bucket.name}/${blob.name}`;
+                photoUrls.push(publicUrl);
+            }
+        }
+        const dataToUpdate = {
+            ...req.body,
+            ...(photoUrls ? { roomPhotos: photoUrls } : {})
+        };
         const updated = await client_1.prisma.roomProviderProfile.update({
             where: { userId: req.user.userId },
-            data: req.body
+            data: dataToUpdate
         });
         res.status(200).json({ message: 'Perfil actualizado correctamente', updated });
     }
@@ -184,7 +223,6 @@ const deleteRoomProviderProfile = async (req, res) => {
             res.status(403).json({ error: 'No autorizado para eliminar este perfil' });
             return;
         }
-        // Opcional: eliminar anuncios del usuario si lo deseas
         await client_1.prisma.ad.deleteMany({
             where: { userId: req.user.userId }
         });

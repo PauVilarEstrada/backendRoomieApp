@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { prisma } from '../prisma/client'
 import { AuthRequest } from '../middlewares/auth.middleware'
 import { roommateProfileSchema, roomProviderProfileSchema } from './profile.validator'
+import { bucket } from '../utils/storage'
 
 export const createRoommateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -65,7 +66,7 @@ export const createRoommateProfile = async (req: AuthRequest, res: Response): Pr
   }
 }
 
-export const createRoomProviderProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const createRoomProviderProfile = async (req: AuthRequest & Request, res: Response): Promise<void> => {
   try {
     const parsed = roomProviderProfileSchema.safeParse(req.body)
     if (!parsed.success) {
@@ -73,17 +74,34 @@ export const createRoomProviderProfile = async (req: AuthRequest, res: Response)
       return
     }
 
-    const data = parsed.data
-
     if (req.user?.profileType !== 'ofrezco') {
       res.status(403).json({ error: 'Este usuario no es del tipo "ofrezco"' })
       return
     }
 
-    const existingProfile = await prisma.roomProviderProfile.findUnique({ where: { userId: req.user.userId } })
-    if (existingProfile) {
-      res.status(409).json({ error: 'Ya tienes un perfil de proveedor creado' })
-      return
+    const data = parsed.data
+
+    // Subir archivos (roomPhotos) a Cloud Storage
+    const photos = req.files as Express.Multer.File[] // multer
+
+    const photoUrls: string[] = []
+
+    for (const file of photos) {
+      const blob = bucket.file(`roomPhotos/${Date.now()}_${file.originalname}`)
+      const blobStream = blob.createWriteStream({
+        resumable: false,
+        contentType: file.mimetype,
+        predefinedAcl: 'publicRead' // para acceso público
+      })
+
+      await new Promise((resolve, reject) => {
+        blobStream.on('finish', resolve)
+        blobStream.on('error', reject)
+        blobStream.end(file.buffer)
+      })
+
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`
+      photoUrls.push(publicUrl)
     }
 
     const profile = await prisma.roomProviderProfile.create({
@@ -97,12 +115,12 @@ export const createRoomProviderProfile = async (req: AuthRequest, res: Response)
         minStay: data.minStay,
         maxStay: data.maxStay,
         allowsPets: data.allowsPets,
-        features: data.features,
-        restrictions: data.restrictions,
+        features: data.features || [],
+        restrictions: data.restrictions || [],
         genderPref: data.genderPref,
-        roomPhotos: data.roomPhotos,
-        profilePhotos: data.profilePhotos,
-        roomVideo: data.roomVideo
+        roomPhotos: photoUrls,
+        profilePhotos: data.profilePhotos
+        // Eliminado roomVideo
       }
     })
 
@@ -121,8 +139,8 @@ export const createRoomProviderProfile = async (req: AuthRequest, res: Response)
         genderPref: data.genderPref,
         features: data.features || [],
         restrictions: data.restrictions || [],
-        images: data.roomPhotos,
-        video: data.roomVideo || null,
+        images: photoUrls,
+        video: null,
         userId: req.user.userId
       }
     })
@@ -173,16 +191,47 @@ export const deleteRoommateProfile = async (req: AuthRequest, res: Response): Pr
   }
 }
 
-export const updateRoomProviderProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const updateRoomProviderProfile = async (req: AuthRequest & Request, res: Response): Promise<void> => {
   try {
     if (req.user?.profileType !== 'ofrezco') {
       res.status(403).json({ error: 'No autorizado para modificar este perfil' })
       return
     }
 
+    // Si recibes nuevas fotos en update, sube igual
+    const photos = req.files as Express.Multer.File[] | undefined
+
+    let photoUrls: string[] | undefined = undefined
+
+    if (photos && photos.length > 0) {
+      photoUrls = []
+      for (const file of photos) {
+        const blob = bucket.file(`roomPhotos/${Date.now()}_${file.originalname}`)
+        const blobStream = blob.createWriteStream({
+          resumable: false,
+          contentType: file.mimetype,
+          predefinedAcl: 'publicRead'
+        })
+
+        await new Promise((resolve, reject) => {
+          blobStream.on('finish', resolve)
+          blobStream.on('error', reject)
+          blobStream.end(file.buffer)
+        })
+
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`
+        photoUrls.push(publicUrl)
+      }
+    }
+
+    const dataToUpdate = {
+      ...req.body,
+      ...(photoUrls ? { roomPhotos: photoUrls } : {})
+    }
+
     const updated = await prisma.roomProviderProfile.update({
       where: { userId: req.user.userId },
-      data: req.body
+      data: dataToUpdate
     })
 
     res.status(200).json({ message: 'Perfil actualizado correctamente', updated })
@@ -199,7 +248,6 @@ export const deleteRoomProviderProfile = async (req: AuthRequest, res: Response)
       return
     }
 
-    // Opcional: eliminar anuncios del usuario si lo deseas
     await prisma.ad.deleteMany({
       where: { userId: req.user.userId }
     })
