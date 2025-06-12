@@ -36,10 +36,9 @@ app.get('/me', auth_middleware_1.verifyToken, (req, res) => {
 });
 // Ruta protegida solo para admins
 app.delete('/admin/delete-user/:id', auth_middleware_1.verifyToken, auth_middleware_1.isAdmin, async (req, res) => {
-    const userIdToDelete = req.params.id;
     try {
         const deletedUser = await client_1.prisma.user.delete({
-            where: { id: userIdToDelete }
+            where: { id: req.params.id }
         });
         res.status(200).json({ message: 'Usuario eliminado', deletedUser });
     }
@@ -52,10 +51,25 @@ app.delete('/admin/delete-user/:id', auth_middleware_1.verifyToken, auth_middlew
 app.use('/admin', admin_routes_1.default);
 app.use('/profile', profile_routes_1.default);
 app.use('/ads', ads_routes_1.default);
-app.use('/chat', chat_routes_1.default); // ✅ Añadido
+app.use('/chat', chat_routes_1.default);
 // Ruta pública simple
 app.get('/', (_req, res) => {
     res.send('API de Encontrar Roomie funcionando ✅');
+});
+// Health check (GET /healthz)
+// Esta función tiene exactamente 3 params (req, res, next),
+// devuelve void y no un Promise directamente, para que encaje
+// con el tipo RequestHandler de Express sin confundir a TS.
+app.get('/healthz', (req, res, next) => {
+    client_1.prisma
+        .$queryRaw `SELECT 1`
+        .then(() => {
+        res.status(200).send('OK');
+    })
+        .catch((e) => {
+        console.error('DB CONNECT ERROR', e);
+        res.status(500).send('DB FAIL');
+    });
 });
 // Servidor HTTP + WebSockets
 const PORT = process.env.PORT || 8080;
@@ -68,7 +82,7 @@ const io = new socket_io_1.Server(server, {
 });
 // Handlers de chat
 (0, chat_gateway_1.registerChatHandlers)(io);
-// Ejecutar cada 15 minutos
+// Ejecutar cada 15 minutos la limpieza de usuarios no verificados
 node_cron_1.default.schedule('*/15 * * * *', async () => {
     await (0, cleanupUnversifiedUsers_1.cleanupUnverifiedUsers)();
 });

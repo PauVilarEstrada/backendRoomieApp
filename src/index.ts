@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express'
+import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import cookieParser from 'cookie-parser'
@@ -38,31 +38,52 @@ app.get('/me', verifyToken, (req: AuthRequest, res: Response) => {
 })
 
 // Ruta protegida solo para admins
-app.delete('/admin/delete-user/:id', verifyToken, isAdmin, async (req: AuthRequest, res: Response) => {
-  const userIdToDelete = req.params.id
-
-  try {
-    const deletedUser = await prisma.user.delete({
-      where: { id: userIdToDelete }
-    })
-
-    res.status(200).json({ message: 'Usuario eliminado', deletedUser })
-  } catch (err) {
-    console.error('[ADMIN DELETE ERROR]', err)
-    res.status(500).json({ error: 'Error al eliminar el usuario' })
+app.delete(
+  '/admin/delete-user/:id',
+  verifyToken,
+  isAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const deletedUser = await prisma.user.delete({
+        where: { id: req.params.id }
+      })
+      res.status(200).json({ message: 'Usuario eliminado', deletedUser })
+    } catch (err) {
+      console.error('[ADMIN DELETE ERROR]', err)
+      res.status(500).json({ error: 'Error al eliminar el usuario' })
+    }
   }
-})
+)
 
 // Otras rutas
 app.use('/admin', adminRoutes)
 app.use('/profile', profileRoutes)
 app.use('/ads', adsRoutes)
-app.use('/chat', chatRoutes) // ✅ Añadido
+app.use('/chat', chatRoutes)
 
 // Ruta pública simple
 app.get('/', (_req, res) => {
   res.send('API de Encontrar Roomie funcionando ✅')
 })
+
+// Health check (GET /healthz)
+// Esta función tiene exactamente 3 params (req, res, next),
+// devuelve void y no un Promise directamente, para que encaje
+// con el tipo RequestHandler de Express sin confundir a TS.
+app.get(
+  '/healthz',
+  (req: Request, res: Response, next: NextFunction) => {
+    prisma
+      .$queryRaw`SELECT 1`
+      .then(() => {
+        res.status(200).send('OK')
+      })
+      .catch((e) => {
+        console.error('DB CONNECT ERROR', e)
+        res.status(500).send('DB FAIL')
+      })
+  }
+)
 
 // Servidor HTTP + WebSockets
 const PORT = process.env.PORT || 8080
@@ -77,7 +98,7 @@ const io = new SocketIOServer(server, {
 // Handlers de chat
 registerChatHandlers(io)
 
-// Ejecutar cada 15 minutos
+// Ejecutar cada 15 minutos la limpieza de usuarios no verificados
 cron.schedule('*/15 * * * *', async () => {
   await cleanupUnverifiedUsers()
 })
