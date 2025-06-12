@@ -58,7 +58,7 @@ app.get('/', (_req, res) => {
     res.send('API de Encontrar Roomie funcionando ✅');
 });
 // Servidor HTTP + WebSockets
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 const server = http_1.default.createServer(app);
 const io = new socket_io_1.Server(server, {
     cors: {

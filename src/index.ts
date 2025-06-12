@@ -65,7 +65,7 @@ app.get('/', (_req, res) => {
 })
 
 // Servidor HTTP + WebSockets
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 8080
 const server = http.createServer(app)
 const io = new SocketIOServer(server, {
   cors: {
