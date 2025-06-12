@@ -41,7 +41,7 @@ export const getUserMatchesWithLastMessage = async (req: AuthRequest, res: Respo
       }
     })
 
-    const formatted = matches.map(match => {
+    const formatted = matches.map((match: any ) => {
       const otherUser = match.userAId === userId ? match.userB : match.userA
       return {
         matchId: match.id,

@@ -195,7 +195,7 @@ export const getMyMatches = async (req: AuthRequest, res: Response): Promise<voi
     })
 
     // Formatear para que el frontend reciba solo "la otra persona"
-    const formatted = matches.map(match => {
+    const formatted = matches.map((match: any )=> {
       const otherUser = match.userA.id === userId ? match.userB : match.userA
       return {
         matchId: match.id,
