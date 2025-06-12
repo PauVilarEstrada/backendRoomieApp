@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const ads_controller_1 = require("./ads.controller");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const router = (0, express_1.Router)();
+router.get('/', ads_controller_1.getAllAds);
+router.get('/swipe', auth_middleware_1.verifyToken, ads_controller_1.getSwipeAds);
+router.post('/swipe/:adId', auth_middleware_1.verifyToken, ads_controller_1.swipeAd);
+router.get('/matches', auth_middleware_1.verifyToken, ads_controller_1.getMyMatches);
+router.post('/create', auth_middleware_1.verifyToken, ads_controller_1.createListing);
+router.get('/map-markers', ads_controller_1.getMapMarkers);
+router.get('/:id', ads_controller_1.getAdById);
+router.post('/:id/click', ads_controller_1.registerAdClick);
+exports.default = router;
