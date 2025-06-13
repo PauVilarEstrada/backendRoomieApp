@@ -7,7 +7,7 @@ import { Server as SocketIOServer } from 'socket.io'
 import cron from 'node-cron'
 
 import { prisma } from './prisma/client'
-import { verifyToken, isAdmin, AuthRequest } from './middlewares/auth.middleware'
+import { verifyToken, isAdmin } from './middlewares/auth.middleware'
 
 import authRoutes from './auth/auth.routes'
 import adminRoutes from './admin/admin.routes'
@@ -21,6 +21,26 @@ dotenv.config()
 
 const app = express()
 
+// 1) Logger mínimo de todas las peticiones
+app.use((req, _res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`)
+  next()
+})
+
+// 2) Health check rápido antes que nada
+app.get(
+  '/healthz',
+  (req: Request, res: Response, next: NextFunction) => {
+    prisma
+      .$queryRaw`SELECT 1`
+      .then(() => res.status(200).send('OK'))
+      .catch((e) => {
+        console.error('DB CONNECT ERROR', e)
+        res.status(500).send('DB FAIL')
+      })
+  }
+)
+
 // Middlewares globales
 app.use(cors())
 app.use(express.json())
@@ -30,19 +50,18 @@ app.use(cookieParser())
 app.use('/auth', authRoutes)
 
 // Ruta protegida de ejemplo (/me)
-app.get('/me', verifyToken, (req: AuthRequest, res: Response) => {
-  res.status(200).json({
-    message: 'Ruta privada accedida correctamente',
-    user: req.user
-  })
+app.get('/me', verifyToken, (req, res) => {
+  const  userId  = req.user!.userId
+  res.json({ message: 'Hola', userId })
 })
+
 
 // Ruta protegida solo para admins
 app.delete(
   '/admin/delete-user/:id',
   verifyToken,
   isAdmin,
-  async (req: AuthRequest, res: Response) => {
+  async (req, res) => {
     try {
       const deletedUser = await prisma.user.delete({
         where: { id: req.params.id }
@@ -55,54 +74,33 @@ app.delete(
   }
 )
 
-// Otras rutas
+// Resto de rutas de tu API
 app.use('/admin', adminRoutes)
 app.use('/profile', profileRoutes)
 app.use('/ads', adsRoutes)
 app.use('/chat', chatRoutes)
 
-// Ruta pública simple
+// Ruta raíz
 app.get('/', (_req, res) => {
   res.send('API de Encontrar Roomie funcionando ✅')
 })
 
-// Health check (GET /healthz)
-// Esta función tiene exactamente 3 params (req, res, next),
-// devuelve void y no un Promise directamente, para que encaje
-// con el tipo RequestHandler de Express sin confundir a TS.
-app.get(
-  '/healthz',
-  (req: Request, res: Response, next: NextFunction) => {
-    prisma
-      .$queryRaw`SELECT 1`
-      .then(() => {
-        res.status(200).send('OK')
-      })
-      .catch((e) => {
-        console.error('DB CONNECT ERROR', e)
-        res.status(500).send('DB FAIL')
-      })
-  }
-)
-
 // Servidor HTTP + WebSockets
-const PORT = process.env.PORT || 8080
+const PORT = Number(process.env.PORT) || 8080
 const server = http.createServer(app)
 const io = new SocketIOServer(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
+  cors: { origin: '*', methods: ['GET', 'POST'] }
 })
 
-// Handlers de chat
+// Registro de handlers de chat
 registerChatHandlers(io)
 
-// Ejecutar cada 15 minutos la limpieza de usuarios no verificados
-cron.schedule('*/15 * * * *', async () => {
+// Cron job: limpieza de usuarios no verificados cada 15 minutos
+cron.schedule('*/50 * * * *', async () => {
   await cleanupUnverifiedUsers()
 })
 
+// Arranque
 server.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`)
 })

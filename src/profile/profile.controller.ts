@@ -1,64 +1,71 @@
-import { Request, Response } from 'express'
+import { Request, Response, RequestHandler } from 'express'
 import { prisma } from '../prisma/client'
-import { AuthRequest } from '../middlewares/auth.middleware'
 import { roommateProfileSchema, roomProviderProfileSchema } from './profile.validator'
 import { bucket } from '../utils/storage'
 
-export const createRoommateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const createRoommateProfile: RequestHandler = async (req, res) => {
   try {
+    // 1️⃣ Validar body con Zod
     const parsed = roommateProfileSchema.safeParse(req.body)
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten().fieldErrors })
       return
     }
-
     const data = parsed.data
 
-    if (req.user?.profileType !== 'busco') {
-      res.status(403).json({ error: 'Este usuario no es del tipo "busco"' })
+    // 2️⃣ Extraer userId y profileType del token
+    const { userId, profileType } = (req as any).user
+    if (profileType !== 'busco') {
+      res.status(403).json({ error: 'Usuario no autorizado para “busco”' })
       return
     }
 
-    const existingProfile = await prisma.roommateProfile.findUnique({ where: { userId: req.user.userId } })
-    if (existingProfile) {
+    // 3️⃣ Comprobar si ya existe perfil
+    const existing = await prisma.roommateProfile.findUnique({
+      where: { userId }
+    })
+    if (existing) {
       res.status(409).json({ error: 'Ya tienes un perfil de buscador creado' })
       return
     }
 
+    // 4️⃣ Crear RoommateProfile
     const profile = await prisma.roommateProfile.create({
       data: {
-        userId: req.user.userId,
-        description: data.description,
+        userId,
+        description:   data.description,
         preferredArea: data.preferredArea,
-        moveInDate: new Date(data.moveInDate),
-        stayDuration: data.stayDuration,
-        genderPref: data.genderPref,
-        allowsPets: data.allowsPets,
+        moveInDate:    new Date(data.moveInDate),
+        stayDuration:  data.stayDuration,
+        genderPref:    data.genderPref,
+        allowsPets:    data.allowsPets,
         profilePhotos: data.profilePhotos
       }
     })
 
+    // 5️⃣ Crear Ad asociado
     await prisma.ad.create({
       data: {
-        type: 'busco',
-        title: `Busco habitación en ${data.preferredArea}`,
-        description: data.description,
-        location: data.preferredArea,
-        price: 0,
-        expenses: 0,
+        type:          'busco',
+        title:         `Busco habitación en ${data.preferredArea}`,
+        description:   data.description,
+        location:      data.preferredArea,
+        price:         0,
+        expenses:      0,
         availableFrom: new Date(data.moveInDate),
-        minStay: parseInt(data.stayDuration),
-        maxStay: null,
+        minStay:       parseInt(data.stayDuration, 10),
+        maxStay:       null,
         allowsAnimals: data.allowsPets,
-        genderPref: data.genderPref,
-        features: [],
-        restrictions: [],
-        images: data.profilePhotos,
-        video: null,
-        userId: req.user.userId
+        genderPref:    data.genderPref,
+        features:      [],
+        restrictions:  [],
+        images:        data.profilePhotos,
+        video:         null,
+        userId
       }
     })
 
+    // 6️⃣ Responder al cliente
     res.status(201).json({ message: 'Perfil de buscador creado', profile })
   } catch (err) {
     console.error('[CREATE ROOMMATE PROFILE ERROR]', err)
@@ -66,93 +73,117 @@ export const createRoommateProfile = async (req: AuthRequest, res: Response): Pr
   }
 }
 
-export const createRoomProviderProfile = async (req: AuthRequest & Request, res: Response): Promise<void> => {
+export const createRoomProviderProfile: RequestHandler = async (req, res) => {
   try {
-    const parsed = roomProviderProfileSchema.safeParse(req.body)
+    // 1️⃣ Extrae userId y profileType del token
+    const { userId, profileType } = (req as any).user
+    if (profileType !== 'ofrezco') {
+      res.status(403).json({ error: 'Usuario no autorizado para “ofrezco”' })
+      return
+    }
+
+    // 2️⃣ Multer ha llenado req.files con { roomPhotos?: File[], profilePhotos?: File[] }
+    const files = req.files as Record<string, Express.Multer.File[]>
+    const roomFiles    = files.roomPhotos    ?? []
+    const profileFiles = files.profilePhotos ?? []
+
+    // 3️⃣ Función auxiliar: sube un buffer y devuelve la URL pública
+    const uploadToBucket = async (
+      file: Express.Multer.File,
+      folder: string
+    ): Promise<string> => {
+      const blob   = bucket.file(`${folder}/${Date.now()}_${file.originalname}`)
+      const stream = blob.createWriteStream({
+        resumable: false,
+        contentType: file.mimetype,
+        predefinedAcl: 'publicRead'
+      })
+      await new Promise<void>((resolve, reject) => {
+        stream.on('finish',  () => resolve())
+        stream.on('error',   (e) => reject(e))
+        stream.end(file.buffer)
+      })
+      return `https://storage.googleapis.com/${bucket.name}/${blob.name}`
+    }
+
+    // 4️⃣ Sube todas las imágenes en paralelo
+    const roomUrls    = await Promise.all(roomFiles   .map(f => uploadToBucket(f, 'roomPhotos')))
+    const profileUrls = await Promise.all(profileFiles.map(f => uploadToBucket(f, 'profilePhotos')))
+
+    // 5️⃣ Coerción de strings a números
+    const rent     = parseInt(req.body.rent,     10)
+    const expenses = parseInt(req.body.expenses, 10)
+    const minStay  = parseInt(req.body.minStay,  10)
+    const maxStay  = req.body.maxStay ? parseInt(req.body.maxStay, 10) : undefined
+
+    // 6️⃣ Reconstruye el objeto para Zod, incluyendo las URLs
+    const toValidate = {
+      ...req.body,
+      rent,
+      expenses,
+      minStay,
+      maxStay,
+      roomPhotos:    roomUrls,
+      profilePhotos: profileUrls
+    }
+    const parsed = roomProviderProfileSchema.safeParse(toValidate)
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten().fieldErrors })
       return
     }
-
-    if (req.user?.profileType !== 'ofrezco') {
-      res.status(403).json({ error: 'Este usuario no es del tipo "ofrezco"' })
-      return
-    }
-
     const data = parsed.data
 
-    // Subir archivos (roomPhotos) a Cloud Storage
-    const photos = req.files as Express.Multer.File[] // multer
-
-    const photoUrls: string[] = []
-
-    for (const file of photos) {
-      const blob = bucket.file(`roomPhotos/${Date.now()}_${file.originalname}`)
-      const blobStream = blob.createWriteStream({
-        resumable: false,
-        contentType: file.mimetype,
-        predefinedAcl: 'publicRead' // para acceso público
-      })
-
-      await new Promise((resolve, reject) => {
-        blobStream.on('finish', resolve)
-        blobStream.on('error', reject)
-        blobStream.end(file.buffer)
-      })
-
-      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`
-      photoUrls.push(publicUrl)
-    }
-
+    // 7️⃣ Crea el RoomProviderProfile
     const profile = await prisma.roomProviderProfile.create({
       data: {
-        userId: req.user.userId,
-        spaceDesc: data.spaceDesc,
-        rent: data.rent,
-        expenses: data.expenses,
-        area: data.area,
-        availability: new Date(data.availability),
-        minStay: data.minStay,
-        maxStay: data.maxStay,
-        allowsPets: data.allowsPets,
-        features: data.features || [],
-        restrictions: data.restrictions || [],
-        genderPref: data.genderPref,
-        roomPhotos: photoUrls,
-        profilePhotos: data.profilePhotos
-        // Eliminado roomVideo
+        userId,
+        spaceDesc:     data.spaceDesc,
+        rent:          data.rent,
+        expenses:      data.expenses,
+        area:          data.area,
+        availability:  new Date(data.availability),
+        minStay:       data.minStay,
+        maxStay:       data.maxStay,
+        allowsPets:    data.allowsPets,
+        features:      data.features    || [],
+        restrictions:  data.restrictions || [],
+        genderPref:    data.genderPref,
+        roomPhotos:    roomUrls,
+        profilePhotos: profileUrls
       }
     })
 
+    // 8️⃣ Crea el Ad asociado
     await prisma.ad.create({
       data: {
-        type: 'ofrezco',
-        title: `Habitación disponible en ${data.area}`,
-        description: data.spaceDesc,
-        location: data.area,
-        price: data.rent,
-        expenses: data.expenses,
+        type:          'ofrezco',
+        title:         `Habitación en ${data.area}`,
+        description:   data.spaceDesc,
+        location:      data.area,
+        price:         data.rent,
+        expenses:      data.expenses,
         availableFrom: new Date(data.availability),
-        minStay: data.minStay,
-        maxStay: data.maxStay,
+        minStay:       data.minStay,
+        maxStay:       data.maxStay,
         allowsAnimals: data.allowsPets,
-        genderPref: data.genderPref,
-        features: data.features || [],
-        restrictions: data.restrictions || [],
-        images: photoUrls,
-        video: null,
-        userId: req.user.userId
+        genderPref:    data.genderPref,
+        features:      data.features    || [],
+        restrictions:  data.restrictions || [],
+        images:        roomUrls,
+        video:         null,
+        userId
       }
     })
 
+    // 9️⃣ Devuelve 201 con el perfil creado
     res.status(201).json({ message: 'Perfil de proveedor creado', profile })
-  } catch (err) {
+  } catch (err: any) {
     console.error('[CREATE PROVIDER PROFILE ERROR]', err)
     res.status(500).json({ error: 'Error al crear el perfil de proveedor' })
   }
 }
 
-export const updateRoommateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const updateRoommateProfile: RequestHandler = async (req, res) => {
   try {
     if (req.user?.profileType !== 'busco') {
       res.status(403).json({ error: 'No autorizado' })
@@ -171,7 +202,7 @@ export const updateRoommateProfile = async (req: AuthRequest, res: Response): Pr
   }
 }
 
-export const deleteRoommateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deleteRoommateProfile: RequestHandler = async (req, res) => {
   try {
     if (req.user?.profileType !== 'busco' && !req.user?.isAdmin) {
       res.status(403).json({ error: 'No autorizado' })
@@ -191,7 +222,7 @@ export const deleteRoommateProfile = async (req: AuthRequest, res: Response): Pr
   }
 }
 
-export const updateRoomProviderProfile = async (req: AuthRequest & Request, res: Response): Promise<void> => {
+export const updateRoomProviderProfile: RequestHandler = async (req, res) => {
   try {
     if (req.user?.profileType !== 'ofrezco') {
       res.status(403).json({ error: 'No autorizado para modificar este perfil' })
@@ -241,7 +272,7 @@ export const updateRoomProviderProfile = async (req: AuthRequest & Request, res:
   }
 }
 
-export const deleteRoomProviderProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deleteRoomProviderProfile: RequestHandler = async (req, res) => {
   try {
     if (req.user?.profileType !== 'ofrezco' && !req.user?.isAdmin) {
       res.status(403).json({ error: 'No autorizado para eliminar este perfil' })
@@ -263,7 +294,7 @@ export const deleteRoomProviderProfile = async (req: AuthRequest, res: Response)
   }
 }
 
-export const getRoommateProfileById = async (req: Request, res: Response): Promise<void> => {
+export const getRoommateProfileById: RequestHandler = async (req, res) => {
   try {
     const { id } = req.params
 
@@ -302,7 +333,7 @@ export const getRoommateProfileById = async (req: Request, res: Response): Promi
   }
 }
 
-export const getRoomProviderProfileById = async (req: Request, res: Response): Promise<void> => {
+export const getRoomProviderProfileById: RequestHandler = async (req, res) => {
   try {
     const { id } = req.params
 
@@ -343,7 +374,7 @@ export const getRoomProviderProfileById = async (req: Request, res: Response): P
 }
 
 
-export const updateMyAccount = async (req: AuthRequest, res: Response): Promise<void> => {
+export const updateMyAccount: RequestHandler = async (req, res) => {
   try {
     const { name, surname, email, prefix, phone, language, gender } = req.body
 
@@ -359,7 +390,7 @@ export const updateMyAccount = async (req: AuthRequest, res: Response): Promise<
   }
 }
 
-export const deleteMyAccount = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deleteMyAccount: RequestHandler = async (req, res) => {
   try {
     const userId = req.user!.userId
 

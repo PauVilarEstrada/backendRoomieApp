@@ -22,7 +22,7 @@ export const roomProviderProfileSchema = z.object({
   features: z.array(z.string()).optional(),
   restrictions: z.array(z.string()).optional(),
   genderPref: z.string().min(3),
-  roomPhotos: z.array(z.string().url()).min(2).max(15),
+  roomPhotos: z.array(z.string().url()).min(2),
   profilePhotos: z.array(z.string().url()).max(5).optional(),
   roomVideo: z.string().url().optional()
 })
