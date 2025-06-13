@@ -1,10 +1,14 @@
-import { Request } from 'express'
+// src/types/express/index.d.ts
+import 'express-serve-static-core'
 
-export interface AuthRequest extends Request {
-  user?: {
-    userId: string
-    email: string
-    profileType: string
-    isAdmin: boolean
+declare module 'express-serve-static-core' {
+  interface Request {
+    /** el payload JWT, inyectado por verifyToken */
+    user?: {
+      userId: string
+      email: string
+      profileType: 'busco' | 'ofrezco'
+      isAdmin: boolean
+    }
   }
 }
