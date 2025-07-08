@@ -12,8 +12,6 @@ import {
   getUnreadCounts
 } from './chat.controller'
 import { isMatchParticipant } from '../middlewares/match.middleware'
-import { AuthRequest } from '../middlewares/auth.middleware'
-
 
 const router = Router()
 

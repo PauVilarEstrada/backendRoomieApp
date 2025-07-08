@@ -15,8 +15,14 @@ export const registerSchema = z.object({
   'No quiero decirlo'
   ]),
   language: z.string().min(1),
-  password: z.string().min(6)
-})
+  profileType: z.enum(['busco','ofrezco'],),
+  password: z.string().min(6),
+   repeatPassword: z.string()
+  })
+  .refine(data => data.password === data.repeatPassword, {
+    message: 'Las contraseñas no coinciden',
+    path: ['repeatPassword']
+  })
 
 
 export const verifyEmailSchema = z.object({

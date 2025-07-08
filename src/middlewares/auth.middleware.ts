@@ -1,5 +1,5 @@
 // src/middlewares/auth.middleware.ts
-import { RequestHandler } from 'express'
+import { RequestHandler, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 
 export interface AuthPayload {
@@ -53,5 +53,15 @@ export const isAdmin: RequestHandler = (req, res, next) => {
         error: 'Acceso denegado. No tienes permiso para realizar esta acción.'
       })
     return
+  }
+}
+
+
+export interface AuthRequest extends Request {
+  user?: {
+    userId: string
+    email: string
+    profileType: 'busco' | 'ofrezco'
+    isAdmin: boolean
   }
 }

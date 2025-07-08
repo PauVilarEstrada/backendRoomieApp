@@ -5,6 +5,18 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "strict": true,
-    "esModuleInterop": true
-  }
+    "esModuleInterop": true,
+
+    // <<< Añade esto
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ]
+    // Fin de añadido >>>
+  },
+  // <<< Y asegúrate de incluir todo el src
+  "include": [
+    "src/**/*"
+  ]
+  // >>>  
 }
