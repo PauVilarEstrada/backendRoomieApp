@@ -81,9 +81,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     await sendVerificationEmail(email, verificationCode)
 
     res.status(201).json({ message: 'Usuario creado. Revisa tu correo para verificarlo.' })
-  } catch (err) {
-    console.error('[REGISTER ERROR]', err)
-    res.status(500).json({ error: 'Error interno al registrar usuario.' })
+  } catch (err: any) {
+     console.error("❌ Error al crear usuario:", err);
+    res.status(500).json({ error: 'Error al crear usuario.' })
   }
 }
 
