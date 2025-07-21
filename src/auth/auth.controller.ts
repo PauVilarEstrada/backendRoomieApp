@@ -164,11 +164,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       .cookie('token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'none',           // <- Cambiado a 'none' para cross-site
         maxAge: 7 * 24 * 60 * 60 * 1000
       })
       .status(200)
-      .json({ message: 'Inicio de sesión exitoso.' })
+      .json({
+        message: 'Inicio de sesión exitoso.',
+        token                     // <- Devolvemos también el token en la respuesta
+      })
   } catch (err) {
     console.error('[LOGIN ERROR]', err)
     res.status(500).json({ error: 'Error al iniciar sesión.' })

@@ -22,6 +22,7 @@ const router = Router()
 router.post(
   '/roommate',
   verifyToken,
+  upload.array('profilePhotos', 8),
   createRoommateProfile
 )
 

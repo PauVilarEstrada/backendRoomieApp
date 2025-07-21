@@ -2,34 +2,60 @@ import { Request, Response, RequestHandler } from 'express'
 import { prisma } from '../prisma/client'
 import { roommateProfileSchema, roomProviderProfileSchema } from './profile.validator'
 import { bucket } from '../utils/storage'
+import { Express } from 'express'
 
 export const createRoommateProfile: RequestHandler = async (req, res) => {
   try {
-    // 1️⃣ Validar body con Zod
-    const parsed = roommateProfileSchema.safeParse(req.body)
+    // 🔹 0️⃣ Extraer ficheros subidos (Multer debe estar aplicado en la ruta)
+    const files = req.files as Record<string, Express.Multer.File[]>
+    const profileFiles = files.profilePhotos ?? []
+
+    // 🔹 1️⃣ Subir cada archivo a GCS y obtener su URL pública
+    const uploadToBucket = async (file: Express.Multer.File, folder: string): Promise<string> => {
+      const blob = bucket.file(`${folder}/${Date.now()}_${file.originalname}`)
+      const stream = blob.createWriteStream({
+        resumable: false,
+        contentType: file.mimetype,
+        predefinedAcl: 'publicRead'
+      })
+      await new Promise<void>((resolve, reject) => {
+        stream.on('finish', resolve)
+        stream.on('error', reject)
+        stream.end(file.buffer)
+      })
+      return `https://storage.googleapis.com/${bucket.name}/${blob.name}`
+    }
+    const profileUrls = await Promise.all(
+      profileFiles.map(f => uploadToBucket(f, 'profilePhotos'))
+    )
+
+    // 🔹 2️⃣ Validar datos combinando body + URLs generadas
+    const toValidate = {
+      ...req.body,
+      profilePhotos: profileUrls
+    }
+    const parsed = roommateProfileSchema.safeParse(toValidate)
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten().fieldErrors })
       return
     }
     const data = parsed.data
 
-    // 2️⃣ Extraer userId y profileType del token
+    // 🔹 3️⃣ Extraer userId y profileType del token
     const { userId, profileType } = (req as any).user
     if (profileType !== 'busco') {
       res.status(403).json({ error: 'Usuario no autorizado para “busco”' })
       return
     }
 
-    // 3️⃣ Comprobar si ya existe perfil
-    const existing = await prisma.roommateProfile.findUnique({
-      where: { userId }
-    })
+    // 🔹 4️⃣ Comprobar si ya existe perfil de buscador
+    const existing = await prisma.roommateProfile.findUnique({ where: { userId } })
     if (existing) {
       res.status(409).json({ error: 'Ya tienes un perfil de buscador creado' })
       return
     }
 
-    // 4️⃣ Crear RoommateProfile
+    // 🔹 5️⃣ Crear RoommateProfile en la BBDD
     const profile = await prisma.roommateProfile.create({
       data: {
         userId,
@@ -39,11 +65,11 @@ export const createRoommateProfile: RequestHandler = async (req, res) => {
         stayDuration:  data.stayDuration,
         genderPref:    data.genderPref,
         allowsPets:    data.allowsPets,
-        profilePhotos: data.profilePhotos
+        profilePhotos: profileUrls
       }
     })
 
-    // 5️⃣ Crear Ad asociado
+    // 🔹 6️⃣ Crear Ad asociado
     await prisma.ad.create({
       data: {
         type:          'busco',
@@ -59,17 +85,20 @@ export const createRoommateProfile: RequestHandler = async (req, res) => {
         genderPref:    data.genderPref,
         features:      [],
         restrictions:  [],
-        images:        data.profilePhotos,
+        images:        profileUrls,
         video:         null,
         userId
       }
     })
 
-    // 6️⃣ Responder al cliente
+    // 🔹 7️⃣ Responder al cliente
     res.status(201).json({ message: 'Perfil de buscador creado', profile })
+    return
+
   } catch (err) {
     console.error('[CREATE ROOMMATE PROFILE ERROR]', err)
     res.status(500).json({ error: 'Error al crear el perfil de buscador' })
+    return
   }
 }
 
